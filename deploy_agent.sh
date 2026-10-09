@@ -28,16 +28,16 @@ trap cleanup_on_interrupt SIGINT SIGTSTP
 
 check_prereqs() {
     echo "=== Pre-flight checks ==="
-    if! command -v python3 >/dev/null 2>&1; then
+    if ! command -v python3 >/dev/null 2>&1; then
         echo "[X] python3 not found. Install python3."
         exit 1
     fi
     echo "[✓] python3 $(python3 --version 2>&1)"
-    if! command -v zip >/dev/null 2>&1; then
+    if ! command -v zip >/dev/null 2>&1; then
         echo "[X] zip not found. Install zip (sudo apt install zip)."
         exit 1
     fi
-    echo "[✓] zip found: $(zip -v 2>&1 | head -n1)"
+    echo "[✓] zip found"
 }
 
 deploy_project() {
@@ -53,7 +53,7 @@ deploy_project() {
 
     if [ -d "$BASE_DIR" ]; then
         read -p "Directory $BASE_DIR already exists. Overwrite? [y/N]: " ow
-        if [[ "$ow"!= "y" && "$ow"!= "Y" ]]; then
+        if [[ "$ow" != "y" && "$ow" != "Y" ]]; then
             echo "[!] Aborting. Directory exists."
             BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
             return
@@ -64,7 +64,7 @@ deploy_project() {
     echo "[*] Creating structure $BASE_DIR"
     mkdir -p "$BASE_DIR/Helpers" "$BASE_DIR/reports" "$BASE_DIR/archives/attendance" "$BASE_DIR/archives/absent"
 
-    if [! -f "templates/attendance_checker.py" ] || [! -f "templates/config.json" ] || [! -f "templates/assets.csv" ]; then
+    if [ ! -f "templates/attendance_checker.py" ] || [ ! -f "templates/config.json" ] || [! -f "templates/assets.csv" ]; then
         echo "[X] templates/ files missing. Need attendance_checker.py, config.json, assets.csv"
         rm -rf "$BASE_DIR"
         BASE_DIR=""; return
@@ -80,7 +80,7 @@ deploy_project() {
 
     if [ "$roster_opt" = "1" ]; then
         read -p "How many students to copy (1-10): " num
-        if! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt 10 ]; then
+        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt 10 ]; then
             echo "[X] Invalid number. Must be 1-10."
             rm -rf "$BASE_DIR"; BASE_DIR=""; return
         fi
@@ -90,7 +90,7 @@ deploy_project() {
         echo "[✓] Copied $num students. total_sessions set to 5 (4 prior + today)"
     elif [ "$roster_opt" = "2" ]; then
         read -p "How many students to generate: " num
-        if! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ]; then
+        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ]; then
             echo "[X] Invalid number."
             rm -rf "$BASE_DIR"; BASE_DIR=""; return
         fi
@@ -139,7 +139,7 @@ deploy_project() {
 run_app() {
     read -p "Enter deployed project name (e.g., Deng for attendance_tracker_Deng): " input_name
     BASE_DIR="attendance_tracker_${input_name}"
-    if [! -d "$BASE_DIR" ]; then
+    if [ ! -d "$BASE_DIR" ]; then
         echo "[X] $BASE_DIR not found. Deploy first."
         return
     fi
