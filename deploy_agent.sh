@@ -28,12 +28,12 @@ trap cleanup_on_interrupt SIGINT SIGTSTP
 
 check_prereqs() {
     echo "=== Pre-flight checks ==="
-    if ! command -v python3 >/dev/null 2>&1; then
+    if! command -v python3 >/dev/null 2>&1; then
         echo "[X] python3 not found. Install python3."
         exit 1
     fi
     echo "[✓] python3 $(python3 --version 2>&1)"
-    if ! command -v zip >/dev/null 2>&1; then
+    if! command -v zip >/dev/null 2>&1; then
         echo "[X] zip not found. Install zip (sudo apt install zip)."
         exit 1
     fi
@@ -53,7 +53,7 @@ deploy_project() {
 
     if [ -d "$BASE_DIR" ]; then
         read -p "Directory $BASE_DIR already exists. Overwrite? [y/N]: " ow
-        if [[ "$ow" != "y" && "$ow" != "Y" ]]; then
+        if [[ "$ow"!= "y" && "$ow"!= "Y" ]]; then
             echo "[!] Aborting. Directory exists."
             BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
             return
@@ -62,10 +62,13 @@ deploy_project() {
     fi
 
     echo "[*] Creating structure $BASE_DIR"
-    mkdir -p "$BASE_DIR/Helpers" "$BASE_DIR/reports" "$BASE_DIR/archives/attendance" "$BASE_DIR/archives/absent"
+    if! mkdir -p "$BASE_DIR/Helpers" "$BASE_DIR/reports" "$BASE_DIR/archives/attendance" "$BASE_DIR/archives/absent" 2>/dev/null; then
+        echo "[X] Permission denied or cannot create $BASE_DIR"
+        return
+    fi
 
-    if [ ! -f "templates/attendance_checker.py" ] || [ ! -f "templates/config.json" ] || [! -f "templates/assets.csv" ]; then
-        echo "[X] templates/ files missing. Need attendance_checker.py, config.json, assets.csv"
+    if [! -f "templates/attendance_checker.py" ] || [! -f "templates/config.json" ] || [! -f "templates/assets.csv" ]; then
+        echo "[X] templates/ files missing. Need attendance_checker.py, config.json, assets.csv in templates/"
         rm -rf "$BASE_DIR"
         BASE_DIR=""; return
     fi
@@ -80,17 +83,17 @@ deploy_project() {
 
     if [ "$roster_opt" = "1" ]; then
         read -p "How many students to copy (1-10): " num
-        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt 10 ]; then
+        if! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt 10 ]; then
             echo "[X] Invalid number. Must be 1-10."
             rm -rf "$BASE_DIR"; BASE_DIR=""; return
         fi
         head -n1 templates/assets.csv > "$BASE_DIR/Helpers/assets.csv"
         tail -n +2 templates/assets.csv | head -n "$num" >> "$BASE_DIR/Helpers/assets.csv"
-        echo "{\"thresholds\": {\"warning\": 75, \"failure\": 50}, \"run_mode\": \"live\", \"total_sessions\": 5}" | python3 -m json.tool > "$BASE_DIR/Helpers/config.json.tmp" && mv "$BASE_DIR/Helpers/config.json.tmp" "$BASE_DIR/Helpers/config.json"
-        echo "[✓] Copied $num students. total_sessions set to 5 (4 prior + today)"
+        python3 -c "import json; d=json.load(open('$BASE_DIR/Helpers/config.json')); d['total_sessions']=5; json.dump(d, open('$BASE_DIR/Helpers/config.json','w'), indent=4)"
+        echo "[✓] Copied $num students. total_sessions=5 (4 prior + today)"
     elif [ "$roster_opt" = "2" ]; then
         read -p "How many students to generate: " num
-        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ]; then
+        if! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ]; then
             echo "[X] Invalid number."
             rm -rf "$BASE_DIR"; BASE_DIR=""; return
         fi
@@ -100,13 +103,11 @@ deploy_project() {
         for ((i=0; i<num && i<10; i++)); do
             echo "${emails[$i]},${names[$i]},0,0" >> "$BASE_DIR/Helpers/assets.csv"
         done
-        if [ "$num" -gt 10 ]; then
-            for ((i=10; i<num; i++)); do
-                echo "student${i}@example.com,Student ${i},0,0" >> "$BASE_DIR/Helpers/assets.csv"
-            done
-        fi
-        echo "{\"thresholds\": {\"warning\": 75, \"failure\": 50}, \"run_mode\": \"live\", \"total_sessions\": 1}" | python3 -m json.tool > "$BASE_DIR/Helpers/config.json.tmp" && mv "$BASE_DIR/Helpers/config.json.tmp" "$BASE_DIR/Helpers/config.json"
-        echo "[✓] Generated $num fresh students. total_sessions set to 1"
+        for ((i=10; i<num; i++)); do
+            echo "student${i}@example.com,Student ${i},0,0" >> "$BASE_DIR/Helpers/assets.csv"
+        done
+        python3 -c "import json; d=json.load(open('$BASE_DIR/Helpers/config.json')); d['total_sessions']=1; json.dump(d, open('$BASE_DIR/Helpers/config.json','w'), indent=4)"
+        echo "[✓] Generated $num fresh students. total_sessions=1"
     else
         echo "[X] Invalid option."
         rm -rf "$BASE_DIR"; BASE_DIR=""; return
@@ -114,7 +115,7 @@ deploy_project() {
 
     chmod +x "$BASE_DIR/attendance_checker.py"
     chmod 600 "$BASE_DIR/Helpers/config.json"
-    echo "[✓] Permissions set: attendance_checker.py executable (755), Helpers/config.json owner RW only (600)"
+    echo "[✓] Permissions set: attendance_checker.py 755, Helpers/config.json 600"
     ls -l "$BASE_DIR/attendance_checker.py" "$BASE_DIR/Helpers/config.json"
 
     read -p "Update alert thresholds? [y/N]: " upd
@@ -137,13 +138,12 @@ deploy_project() {
 }
 
 run_app() {
-    read -p "Enter deployed project name (e.g., Deng for attendance_tracker_Deng): " input_name
+    read -p "Enter deployed project name (e.g., Deng): " input_name
     BASE_DIR="attendance_tracker_${input_name}"
-    if [ ! -d "$BASE_DIR" ]; then
+    if [! -d "$BASE_DIR" ]; then
         echo "[X] $BASE_DIR not found. Deploy first."
         return
     fi
-    echo "[*] Running $BASE_DIR/attendance_checker.py"
     (cd "$BASE_DIR" && python3 attendance_checker.py)
 }
 
@@ -162,20 +162,16 @@ archive_logs() {
         echo "[✓] Archived attendance.log -> $BASE_DIR/archives/attendance/attendance_${timestamp}.log"
         archived=$((archived+1))
     else
-        echo "[!] reports/attendance.log not found - skipping (no log generated yet or empty session)"
+        echo "[!] reports/attendance.log not found - skipping"
     fi
     if [ -f "$BASE_DIR/reports/absent.log" ]; then
         cp "$BASE_DIR/reports/absent.log" "$BASE_DIR/archives/absent/absent_${timestamp}.log"
         echo "[✓] Archived absent.log -> $BASE_DIR/archives/absent/absent_${timestamp}.log"
         archived=$((archived+1))
     else
-        echo "[!] reports/absent.log not found - skipping (no absences or not generated)"
+        echo "[!] reports/absent.log not found - skipping (no absences)"
     fi
-    if [ $archived -eq 0 ]; then
-        echo "[!] No logs to archive."
-    else
-        echo "[✓] Archived $archived log(s)."
-    fi
+    if [ $archived -eq 0 ]; then echo "[!] No logs to archive."; else echo "[✓] Archived $archived log(s)."; fi
 }
 
 while true; do
@@ -191,6 +187,6 @@ while true; do
         2) run_app ;;
         3) archive_logs ;;
         4) echo "Exiting."; exit 0 ;;
-        *) echo "[X] Invalid selection." ;;
+        *) echo "[X] Invalid" ;;
     esac
 done
