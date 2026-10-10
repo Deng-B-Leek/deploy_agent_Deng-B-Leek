@@ -1,54 +1,63 @@
-# deploy_agent_Deng-B-Leek - Automated Project Bootstrapping
+# deploy_agent_Deng-B-Leek
 
 ## Project Description
-Bash deploy agent that automates deployment, execution, archiving and permission management for Student Attendance Tracker. Uses templates/ for source files.
+Bash deploy agent that automates deployment, execution, archiving and permission management.
 
 ## How to Run
 chmod +x deploy_agent.sh
 ./deploy_agent.sh
-Menu: 1) Deploy 2) Run 3) Archive 4) Exit
 
 ## Pre-flight Checks
-Script checks python3 --version and zip command exists. Fails early with clear message if missing.
+- python3 --version and zip checked before mkdir
+- templates files checked BEFORE mkdir
 
 ## Deployed Structure
-    attendance_tracker_{name}/
-    ├── attendance_checker.py
-    ├── Helpers/
-    │   ├── assets.csv
-    │   └── config.json
-    ├── reports/          (starts empty)
-    └── archives/
-        ├── attendance/
-        └── absent/
+attendance_tracker_{name}/
+  attendance_checker.py
+  Helpers/assets.csv, config.json
+  reports/ (starts empty)
+  archives/attendance/, archives/absent/
 
-reports/ starts empty. The application creates reports/attendance.log and reports/absent.log the first time it runs, which during a deploy is the verification run. absent.log only appears if at least one student is marked absent.
+reports/ starts empty, app creates attendance.log and absent.log on first run (verification run). absent.log only if absent.
 
 ## Roster Options and total_sessions
-total_sessions in config.json counts all sessions including today's, so it must be one more than the prior sessions recorded in the roster.
-
-Option A: copy from template - first N rows of templates/assets.csv (max 10) - Prior 4 each - total_sessions 5 (4 prior + today)
-Option B: generate fresh roster - N rows built from arrays in the script - Prior 0 each - total_sessions 1 (0 prior + today)
-
-The verification run is a real marking session, so it updates the roster counts.
+Option A: copy first N rows of templates/assets.csv (max 10) - Prior 4 each - total_sessions 5
+Option B: generate fresh from arrays - Prior 0 - total_sessions 1 via sed
+Option A config.json deployed unmodified.
 
 ## Permissions
-After deployment the script runs chmod +x on attendance_checker.py and chmod 600 on Helpers/config.json (owner read/write only, because it holds the grading-sensitive thresholds), then prints the result with ls -l.
+chmod +x attendance_checker.py and chmod 600 Helpers/config.json, then ls -l
+600 = owner rw only because thresholds are grading-sensitive.
 
 ## Threshold Update Logic
-Prompts Update alert thresholds? [y/N]. If yes, reads warning default 75 and failure default 50, validates numeric with ^[0-9]+$. Uses sed targeting "warning": and "failure": lines only, without reformatting file.
+Prompt Update thresholds [y/N]. If y: empty keeps default 75/50, validates ^[0-9]+$ and 0-100, failure must be < warning else reset to 75/50. Uses sed on "warning": and "failure": lines.
 
 ## Log Archiving Logic
-Checks reports/attendance.log and reports/absent.log existence. Copies to archives/attendance/attendance_YYYYMMDD_HHMMSS.log and archives/absent/absent_YYYYMMDD_HHMMSS.log with timestamp from date +%Y%m%d_%H%M%S. Prints final paths. Gracefully reports if missing.
+timestamp=$(date +%Y%m%d_%H%M%S)
+cp reports/attendance.log archives/attendance/attendance_${timestamp}.log
+cp reports/absent.log archives/absent/absent_${timestamp}.log
+Prints final paths, graceful if missing.
 
-## Trap Test
-Run ./deploy_agent.sh then 1 -> TestTrap -> press Ctrl+C
-Expected: [!] Deployment interrupted..., zips incomplete project to attendance_tracker_TestTrap_archive.zip (using zip -r), deletes incomplete directory attendance_tracker_TestTrap, exits cleanly.
+## Signal Handling Ctrl+C and Ctrl+Z
+Trap for shell script during deployment, not for attendance_checker.py.
+On SIGINT/SIGTSTP: zips incomplete dir to attendance_tracker_{name}_archive.zip via zip -r, only if zip succeeds deletes dir, lists via unzip -l.
+What zip contains: whatever existed before interrupt at Select [1-2] prompt, e.g. Helpers/, reports/, archives/, attendance_checker.py, config.json, assets.csv
 
-## How Tested Structure
-ls -R attendance_tracker_Deng
-ls -l attendance_tracker_Deng/attendance_checker.py attendance_tracker_Deng/Helpers/config.json
-cat attendance_tracker_Deng/Helpers/config.json
+Trap Test:
+1) ./deploy_agent.sh -> 1 -> TestTrap -> at Select [1-2] press Ctrl+C -> zip created, dir deleted
+2) ./deploy_agent.sh -> 1 -> TestTrap2 -> at Select [1-2] press Ctrl+Z -> zip created
+Verify: ls -l *.zip ; unzip -l *_archive.zip ; ls dir should fail
+3) Overwrite prompt Ctrl+C should NOT archive (BASE_DIR not set yet)
 
-## Video Walkthrough
-Link: [Add YouTube unlisted link]
+## How Tested
+ls -R attendance_tracker_Deng -> saw Helpers/, reports/, archives/, py
+ls -l py -> rwxr-xr-x executable
+ls -l config.json -> rw------- 600
+cat config.json -> total_sessions 5 for A, 1 for B
+wc -l assets.csv -> 6 = header+5
+python3 attendance_checker.py -> P/A prompts, logs created, assets.csv updated
+archive logs -> attendance_*.log archived
+trap tests -> zip + cleanup worked for Ctrl+C and Ctrl+Z
+
+## Video
+Link: https://youtu.be/REPLACE_ME - shows logic, live marking, ls -l, Ctrl+C demo with unzip -l, Ctrl+Z demo, archive demo
