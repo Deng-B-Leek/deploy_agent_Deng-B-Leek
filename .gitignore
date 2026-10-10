@@ -1,3 +1,7 @@
-*.bak
-attendance_tracker_*
+attendance_tracker_*/
+*_archive.zip
 *.zip
+*.bak
+reports/
+archives/
+__pycache__/
