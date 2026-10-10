@@ -1,4 +1,6 @@
 #!/bin/bash
+cd "$(dirname "$0")" || exit 1
+
 
 PROJECT_NAME=""
 BASE_DIR=""
@@ -13,8 +15,6 @@ cleanup_on_interrupt() {
         if zip -r "$ARCHIVE_NAME" "$BASE_DIR" >/dev/null 2>&1; then
             if [ -f "$ARCHIVE_NAME" ]; then
                 echo "[✓] Archived incomplete project to $ARCHIVE_NAME"
-                echo "[*] Contents of archive:"
-                unzip -l "$ARCHIVE_NAME" | head -n 20
                 echo "[*] Cleaning up incomplete directory $BASE_DIR"
                 rm -rf "$BASE_DIR"
                 echo "[✓] Cleaned up. Workspace not cluttered."
@@ -33,12 +33,12 @@ trap cleanup_on_interrupt SIGINT SIGTSTP
 
 check_prereqs() {
     echo "=== Pre-flight checks ==="
-    if! command -v python3 >/dev/null 2>&1; then
+    if ! command -v python3 >/dev/null 2>&1; then
         echo "[X] python3 not found. Install python3."
         exit 1
     fi
     echo "[✓] python3 $(python3 --version 2>&1)"
-    if! command -v zip >/dev/null 2>&1; then
+    if ! command -v zip >/dev/null 2>&1; then
         echo "[X] zip not found. Install zip (sudo apt install zip)."
         exit 1
     fi
@@ -48,21 +48,21 @@ check_prereqs() {
 deploy_project() {
     check_prereqs
 
-    if [! -f "templates/attendance_checker.py" ] || [! -f "templates/config.json" ] || [! -f "templates/assets.csv" ]; then
+    if [ ! -f "templates/attendance_checker.py" ] || [ ! -f "templates/config.json" ] || [ ! -f "templates/assets.csv" ]; then
         echo "[X] templates/ files missing. Need attendance_checker.py, config.json, assets.csv in templates/"
         return
     fi
 
     read -p "Enter project directory name (e.g., Deng): " input_name
-    if [ -z "$input_name" ]; then
-        echo "[X] Name cannot be empty."
-        return
+    if ! [[ "$input_name" =~ ^[A-Za-z0-9_-]+$ ]]; then
+ echo "[X] Name must use only letters, numbers, - and _."
+ return
     fi
     local target_dir="attendance_tracker_${input_name}"
 
     if [ -d "$target_dir" ]; then
         read -p "Directory $target_dir already exists. Overwrite? [y/N]: " ow
-        if [[ "$ow"!= "y" && "$ow"!= "Y" ]]; then
+        if [[ "$ow" != "y" && "$ow" != "Y" ]]; then
             echo "[!] Aborting. Directory exists."
             return
         fi
@@ -74,17 +74,17 @@ deploy_project() {
     ARCHIVE_NAME="${BASE_DIR}_archive.zip"
 
     echo "[*] Creating structure $BASE_DIR"
-    if! mkdir -p "$BASE_DIR/Helpers" "$BASE_DIR/reports" "$BASE_DIR/archives/attendance" "$BASE_DIR/archives/absent" 2>/dev/null; then
+    if ! mkdir -p "$BASE_DIR/Helpers" "$BASE_DIR/reports" "$BASE_DIR/archives/attendance" "$BASE_DIR/archives/absent" 2>/dev/null; then
         echo "[X] Permission denied or cannot create $BASE_DIR"
         BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
         return
     fi
 
-    if! cp templates/attendance_checker.py "$BASE_DIR/"; then
+    if ! cp templates/attendance_checker.py "$BASE_DIR/"; then
         echo "[X] Failed to copy attendance_checker.py"
         rm -rf "$BASE_DIR"; BASE_DIR=""; return
     fi
-    if! cp templates/config.json "$BASE_DIR/Helpers/"; then
+    if ! cp templates/config.json "$BASE_DIR/Helpers/"; then
         echo "[X] Failed to copy config.json"
         rm -rf "$BASE_DIR"; BASE_DIR=""; return
     fi
@@ -96,7 +96,7 @@ deploy_project() {
 
     if [ "$roster_opt" = "1" ]; then
         read -p "How many students to copy (1-10): " num
-        if! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt 10 ]; then
+        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt 10 ]; then
             echo "[X] Invalid number. Must be 1-10."
             rm -rf "$BASE_DIR"; BASE_DIR=""; return
         fi
@@ -105,7 +105,7 @@ deploy_project() {
         echo "[✓] Copied $num students. total_sessions=5 (4 prior + today) - config.json unmodified"
     elif [ "$roster_opt" = "2" ]; then
         read -p "How many students to generate: " num
-        if! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ]; then
+        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ]; then
             echo "[X] Invalid number."
             rm -rf "$BASE_DIR"; BASE_DIR=""; return
         fi
@@ -125,10 +125,10 @@ deploy_project() {
         rm -rf "$BASE_DIR"; BASE_DIR=""; return
     fi
 
-    if! chmod +x "$BASE_DIR/attendance_checker.py"; then
+    if ! chmod +x "$BASE_DIR/attendance_checker.py"; then
         echo "[X] chmod +x failed"; rm -rf "$BASE_DIR"; BASE_DIR=""; return
     fi
-    if! chmod 600 "$BASE_DIR/Helpers/config.json"; then
+    if ! chmod 600 "$BASE_DIR/Helpers/config.json"; then
         echo "[X] chmod 600 failed"; rm -rf "$BASE_DIR"; BASE_DIR=""; return
     fi
     echo "[✓] Permissions set: attendance_checker.py +x, Helpers/config.json 600"
@@ -142,14 +142,14 @@ deploy_project() {
         if [[ -z "$warn_in" ]]; then
             echo "[*] Warning empty, using default 75"
         elif [[ "$warn_in" =~ ^[0-9]+$ ]] && [ "$warn_in" -ge 0 ] && [ "$warn_in" -le 100 ]; then
-            warn=$warn_in
+            warn=$((10#$warn_in))
         else
             echo "[*] Invalid warning (must be 0-100), using default 75"
         fi
         if [[ -z "$fail_in" ]]; then
             echo "[*] Failure empty, using default 50"
         elif [[ "$fail_in" =~ ^[0-9]+$ ]] && [ "$fail_in" -ge 0 ] && [ "$fail_in" -le 100 ]; then
-            fail=$fail_in
+            fail=$((10#$fail_in))
         else
             echo "[*] Invalid failure (must be 0-100), using default 50"
         fi
@@ -165,14 +165,16 @@ deploy_project() {
     echo "[*] Verifying deployment..."
     cat "$BASE_DIR/Helpers/config.json"
     echo "[*] Running application to verify..."
-    (cd "$BASE_DIR" && python3 attendance_checker.py)
-    BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+    BASE_DIR=""
+    PROJECT_NAME=""
+    ARCHIVE_NAME=""
+    (cd "$target_dir" && python3 attendance_checker.py)
 }
 
 run_app() {
     read -p "Enter deployed project name (e.g., Deng): " input_name
     local proj_dir="attendance_tracker_${input_name}"
-    if [! -d "$proj_dir" ]; then
+    if [ ! -d "$proj_dir" ]; then
         echo "[X] $proj_dir not found. Deploy first."
         return
     fi
@@ -182,7 +184,7 @@ run_app() {
 archive_logs() {
     read -p "Enter deployed project name to archive (e.g., Deng): " input_name
     local proj_dir="attendance_tracker_${input_name}"
-    if [! -d "$proj_dir" ]; then
+    if [ ! -d "$proj_dir" ]; then
         echo "[X] $proj_dir not found."
         return
     fi
