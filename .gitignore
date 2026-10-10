@@ -5,3 +5,6 @@ attendance_tracker_*/
 reports/
 archives/
 __pycache__/
+*.swp
+.*.swp
+.*.swo
