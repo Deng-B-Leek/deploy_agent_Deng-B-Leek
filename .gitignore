@@ -2,8 +2,6 @@ attendance_tracker_*/
 *_archive.zip
 *.zip
 *.bak
-reports/
-archives/
 __pycache__/
 *.swp
 .*.swp
