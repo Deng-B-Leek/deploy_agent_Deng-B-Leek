@@ -1,35 +1,30 @@
 #!/bin/bash
 cd "$(dirname "$0")" || exit 1
 
-
 PROJECT_NAME=""
 BASE_DIR=""
 ARCHIVE_NAME=""
 
 cleanup_on_interrupt() {
     echo ""
-    echo "[!] Deployment interrupted by signal (Ctrl+C / Ctrl+Z). Archiving..."
     if [ -n "$BASE_DIR" ] && [ -d "$BASE_DIR" ]; then
+        echo "[!] Deployment interrupted by signal (Ctrl+C / Ctrl+Z). Archiving..."
         ARCHIVE_NAME="${BASE_DIR}_archive.zip"
         echo "[*] Zipping incomplete project $BASE_DIR -> $ARCHIVE_NAME"
-        if zip -r "$ARCHIVE_NAME" "$BASE_DIR" >/dev/null 2>&1; then
-            if [ -f "$ARCHIVE_NAME" ]; then
-                echo "[✓] Archived incomplete project to $ARCHIVE_NAME"
-                echo "[*] Cleaning up incomplete directory $BASE_DIR"
-                rm -rf "$BASE_DIR"
-                echo "[✓] Cleaned up. Workspace not cluttered."
-            fi
+        if zip -r "$ARCHIVE_NAME" "$BASE_DIR" >/dev/null 2>&1 && [ -f "$ARCHIVE_NAME" ]; then
+            echo "[✓] Archived incomplete project to $ARCHIVE_NAME"
+            echo "[*] Cleaning up incomplete directory $BASE_DIR"
+            rm -rf "$BASE_DIR"
+            echo "[✓] Cleaned up. Workspace not cluttered."
         else
             echo "[X] zip failed - keeping $BASE_DIR for recovery"
         fi
     else
-        echo "[*] No directory to archive yet."
+        echo "[!] Interrupted before any project files were created."
     fi
     trap - SIGINT SIGTSTP
-    exit 1
+    exit 130
 }
-
-trap cleanup_on_interrupt SIGINT SIGTSTP
 
 check_prereqs() {
     echo "=== Pre-flight checks ==="
@@ -53,10 +48,10 @@ deploy_project() {
         return
     fi
 
-    read -p "Enter project directory name (e.g., Deng): " input_name
+    read -p "Enter project directory name (suffix): " input_name
     if ! [[ "$input_name" =~ ^[A-Za-z0-9_-]+$ ]]; then
- echo "[X] Name must use only letters, numbers, - and _."
- return
+        echo "[X] Name must use only letters, numbers, - and _."
+        return
     fi
     local target_dir="attendance_tracker_${input_name}"
 
@@ -73,20 +68,31 @@ deploy_project() {
     BASE_DIR="$PROJECT_NAME"
     ARCHIVE_NAME="${BASE_DIR}_archive.zip"
 
+    # Arm the trap only now: BASE_DIR is known, and deploy is actually starting.
+    # Ctrl+C from the menu or from the name prompt will NOT hit this trap.
+    trap cleanup_on_interrupt SIGINT SIGTSTP
+
     echo "[*] Creating structure $BASE_DIR"
     if ! mkdir -p "$BASE_DIR/Helpers" "$BASE_DIR/reports" "$BASE_DIR/archives/attendance" "$BASE_DIR/archives/absent" 2>/dev/null; then
         echo "[X] Permission denied or cannot create $BASE_DIR"
+        trap - SIGINT SIGTSTP
         BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
         return
     fi
 
     if ! cp templates/attendance_checker.py "$BASE_DIR/"; then
         echo "[X] Failed to copy attendance_checker.py"
-        rm -rf "$BASE_DIR"; BASE_DIR=""; return
+        rm -rf "$BASE_DIR"
+        trap - SIGINT SIGTSTP
+        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        return
     fi
     if ! cp templates/config.json "$BASE_DIR/Helpers/"; then
         echo "[X] Failed to copy config.json"
-        rm -rf "$BASE_DIR"; BASE_DIR=""; return
+        rm -rf "$BASE_DIR"
+        trap - SIGINT SIGTSTP
+        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        return
     fi
 
     echo "Choose roster build:"
@@ -98,7 +104,10 @@ deploy_project() {
         read -p "How many students to copy (1-10): " num
         if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt 10 ]; then
             echo "[X] Invalid number. Must be 1-10."
-            rm -rf "$BASE_DIR"; BASE_DIR=""; return
+            rm -rf "$BASE_DIR"
+            trap - SIGINT SIGTSTP
+            BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+            return
         fi
         head -n1 templates/assets.csv > "$BASE_DIR/Helpers/assets.csv"
         tail -n +2 templates/assets.csv | head -n "$num" >> "$BASE_DIR/Helpers/assets.csv"
@@ -107,7 +116,10 @@ deploy_project() {
         read -p "How many students to generate: " num
         if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ]; then
             echo "[X] Invalid number."
-            rm -rf "$BASE_DIR"; BASE_DIR=""; return
+            rm -rf "$BASE_DIR"
+            trap - SIGINT SIGTSTP
+            BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+            return
         fi
         names=("Alice Johnson" "Bob Smith" "Charlie Davis" "Diana Prince" "Ethan Cole" "Fiona Adams" "George Miller" "Hannah Lee" "Ian Wright" "Julia King")
         emails=("alice@example.com" "bob@example.com" "charlie@example.com" "diana@example.com" "ethan@example.com" "fiona@example.com" "george@example.com" "hannah@example.com" "ian@example.com" "julia@example.com")
@@ -122,14 +134,25 @@ deploy_project() {
         echo "[✓] Generated $num fresh students. total_sessions=1 via sed"
     else
         echo "[X] Invalid option."
-        rm -rf "$BASE_DIR"; BASE_DIR=""; return
+        rm -rf "$BASE_DIR"
+        trap - SIGINT SIGTSTP
+        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        return
     fi
 
     if ! chmod +x "$BASE_DIR/attendance_checker.py"; then
-        echo "[X] chmod +x failed"; rm -rf "$BASE_DIR"; BASE_DIR=""; return
+        echo "[X] chmod +x failed"
+        rm -rf "$BASE_DIR"
+        trap - SIGINT SIGTSTP
+        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        return
     fi
     if ! chmod 600 "$BASE_DIR/Helpers/config.json"; then
-        echo "[X] chmod 600 failed"; rm -rf "$BASE_DIR"; BASE_DIR=""; return
+        echo "[X] chmod 600 failed"
+        rm -rf "$BASE_DIR"
+        trap - SIGINT SIGTSTP
+        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        return
     fi
     echo "[✓] Permissions set: attendance_checker.py +x, Helpers/config.json 600"
     ls -l "$BASE_DIR/attendance_checker.py" "$BASE_DIR/Helpers/config.json"
@@ -165,6 +188,11 @@ deploy_project() {
     echo "[*] Verifying deployment..."
     cat "$BASE_DIR/Helpers/config.json"
     echo "[*] Running application to verify..."
+
+    # Disarm before handing the terminal to the Python app.
+    # The app must be free to receive its own Ctrl+C.
+    trap - SIGINT SIGTSTP
+
     BASE_DIR=""
     PROJECT_NAME=""
     ARCHIVE_NAME=""
@@ -205,7 +233,11 @@ archive_logs() {
     else
         echo "[!] reports/absent.log not found - skipping (no absences)"
     fi
-    if [ $archived -eq 0 ]; then echo "[!] No logs to archive."; else echo "[✓] Archived $archived log(s)."; fi
+    if [ $archived -eq 0 ]; then
+        echo "[!] No logs to archive."
+    else
+        echo "[✓] Archived $archived log(s)."
+    fi
 }
 
 while true; do
