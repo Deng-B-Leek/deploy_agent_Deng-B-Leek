@@ -25,6 +25,11 @@ cleanup_on_interrupt() {
     trap - SIGINT SIGTSTP
     exit 130
 }
+abort_deploy() {
+    rm -rf "$BASE_DIR"
+    trap - SIGINT SIGTSTP
+    BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+}
 
 check_prereqs() {
     echo "=== Pre-flight checks ==="
@@ -69,29 +74,24 @@ deploy_project() {
     ARCHIVE_NAME="${BASE_DIR}_archive.zip"
 
     # Arm the trap only now: BASE_DIR is known, and deploy is actually starting.
-    # Ctrl+C from the menu or from the name prompt will NOT hit this trap.
+    	# Ctrl+C from the menu or from the name prompt will NOT hit this trap.
     trap cleanup_on_interrupt SIGINT SIGTSTP
 
     echo "[*] Creating structure $BASE_DIR"
     if ! mkdir -p "$BASE_DIR/Helpers" "$BASE_DIR/reports" "$BASE_DIR/archives/attendance" "$BASE_DIR/archives/absent" 2>/dev/null; then
-        echo "[X] Permission denied or cannot create $BASE_DIR"
-        trap - SIGINT SIGTSTP
-        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        echo "[X] Failed to create project structure (check permissions)."
+        abort_deploy
         return
     fi
 
     if ! cp templates/attendance_checker.py "$BASE_DIR/"; then
         echo "[X] Failed to copy attendance_checker.py"
-        rm -rf "$BASE_DIR"
-        trap - SIGINT SIGTSTP
-        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        abort_deploy
         return
     fi
     if ! cp templates/config.json "$BASE_DIR/Helpers/"; then
         echo "[X] Failed to copy config.json"
-        rm -rf "$BASE_DIR"
-        trap - SIGINT SIGTSTP
-        BASE_DIR=""; PROJECT_NAME=""; ARCHIVE_NAME=""
+        abort_deploy
         return
     fi
 
